@@ -1,14 +1,43 @@
 # Baseline Predictive Pipeline -- ETAI
 
-This is the **starting point** for your semester project: a small but *complete* predictive pipeline -- every piece a real project needs (entry point, config, data loading, preprocessing, model, evaluation), just kept as simple as possible for now.
+> 20260675 Carolina Raposo
 
-The task: predict two-year recidivism using ProPublica's COMPAS
-dataset -- the data behind a real 2016 investigation into a risk-
-assessment algorithm actually used by US courts to help inform bail and sentencing decisions. See `data/README.md` for the full problem description and a complete data dictionary before you start.
+### Week 2:
 
-It has some **deliberately weak spots**. Part of your work this
-semester is finding them and making them better -- see the pipeline progress table below, which tracks what changes and why as the weeks
-go on.
+- **Logistic Regression:**
+  - Train accuracy: 0.679
+  - Test accuracy: 0.680
+  - Gap (train - test): -0.001
+  - Precision: 0.66
+  - Recall: 0.60
+  - F1-score: 0.63
+
+- **Decision Tree:**
+  - Train accuracy: 0.829
+  - Test accuracy: 0.629
+  - Gap (train - test): +0.199
+  - Precision: 0.62
+  - Recall: 0.49
+  - F1-score: 0.55
+
+#### Model Comparison:
+The Decision Tree model overfitted because the train accuracy (0.829) is much higher than the test accuracy (0.629), 
+showing a +0.199 gap, while the Logistic Regression model maintained a near-zero gap (-0.001).
+
+The Decision Tree classification report shows lower precision, recall, and F1-score compared to Logistic 
+Regression. Specifically, the drop in recall from 0.60 to 0.49 indicates that the Decision Tree missed more than half of
+the individuals who actually recidivated (false negatives). Overall, Logistic Regression proved to be more reliable, 
+offering both better generalization and superior detection of positive cases.
+
+
+Fairness (False Positive Rate by Race):
+- African-American (n=303): COMPAS = 0.44 | Logistic Regression = 0.33 | Decision Tree = 0.27
+- Caucasian (n=232): COMPAS = 0.25 | Logistic Regression = 0.23 | Decision Tree = 0.24
+
+COMPAS has a big gap between Black and White defendants (0.44 vs 0.25). Logistic regression reduces this gap to 0.33 vs 
+0.23. The Decision Tree lowers the gap even more, but mostly because its recall dropped and it predicts fewer positive 
+cases overall.
+
 
 ## Project structure
 
