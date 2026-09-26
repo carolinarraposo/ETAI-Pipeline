@@ -2,33 +2,20 @@
 
 > 20260675 Carolina Raposo
 
-### Week 2:
+## Week 2:
 
-- **Logistic Regression:**
-  - Train accuracy: 0.679
-  - Test accuracy: 0.680
-  - Gap (train - test): -0.001
-  - Precision: 0.66
-  - Recall: 0.60
-  - F1-score: 0.63
+| | Train acc. | Test acc. | Gap (train - test) | Precision | Recall | F1 |
+|---|---|---|---|---|---|---|
+| **Logistic Regression** | 0.679 | 0.680 | -0.001 | 0.66 | 0.60 | 0.63 |
+| **Decision Tree** | 0.829 | 0.629 | +0.199 | 0.62 | 0.49 | 0.55 |
 
-- **Decision Tree:**
-  - Train accuracy: 0.829
-  - Test accuracy: 0.629
-  - Gap (train - test): +0.199
-  - Precision: 0.62
-  - Recall: 0.49
-  - F1-score: 0.55
-
-#### Model Comparison:
+### Model Comparison:
 The Decision Tree model overfitted because the train accuracy (0.829) is much higher than the test accuracy (0.629), 
-showing a +0.199 gap, while the Logistic Regression model maintained a near-zero gap (-0.001).
-
+showing a +0.199 gap, while the Logistic Regression model maintained a near-zero gap (-0.001). 
 The Decision Tree classification report shows lower precision, recall, and F1-score compared to Logistic 
 Regression. Specifically, the drop in recall from 0.60 to 0.49 indicates that the Decision Tree missed more than half of
 the individuals who actually recidivated (false negatives). Overall, Logistic Regression proved to be more reliable, 
 offering both better generalization and superior detection of positive cases.
-
 
 Fairness (False Positive Rate by Race):
 - African-American (n=303): COMPAS = 0.44 | Logistic Regression = 0.33 | Decision Tree = 0.27
@@ -39,6 +26,31 @@ COMPAS has a big gap between Black and White defendants (0.44 vs 0.25). Logistic
 cases overall.
 
 
+## Week 3 (after the cleaning pipeline):
+
+| | Train acc. | Test acc. | Gap (train - test) | Precision | Recall | F1 |
+|---|---|---|---|---|---|---|
+| **Logistic Regression** | 0.678 | 0.655 | +0.023 | 0.65 | 0.51 | 0.57 |
+| **Decision Tree** | 0.799 | 0.604 | +0.195 | 0.59 | 0.43 | 0.50 |
+
+### Before vs. after cleaning:
+Both models lost a little test accuracy (LR 0.680 -> 0.655, DT 0.629 -> 0.604) and recall (LR 0.60 -> 0.51,
+DT 0.49 -> 0.43). The comparison is not like-for-like: cleaning removed duplicates and turned invalid values and
+placeholders into missing values, and the pipeline still drops every row with a missing value, so the test set
+shrank from 1252 to 1188 rows. Cleaning alone does not improve the metrics; imputation should recover the lost rows.
+It did fix the `race` column (16 fragmented groups -> 6), so the fairness numbers are now reliable.
+
+### Model Comparison:
+Logistic Regression is still the better model (higher accuracy, recall and F1) and barely overfits (gap +0.023),
+while the Decision Tree still overfits heavily (gap +0.195), since it has no depth limit.
+
+Fairness (False Positive Rate by Race, cleaned groups):
+- African-American (n=299): COMPAS = 0.47 | Logistic Regression = 0.30 | Decision Tree = 0.33
+- Caucasian (n=241): COMPAS = 0.23 | Logistic Regression = 0.16 | Decision Tree = 0.19
+
+The gap is +0.24 for COMPAS and +0.14 for both models: reduced, not eliminated. This corrects the week 2
+conclusion that the Decision Tree nearly closed the gap, which was largely noise from the fragmented race groups.
+
 ## Project structure
 
 ```
@@ -48,8 +60,9 @@ cases overall.
 ├── requirements.txt
 ├── src/
 │   ├── data.py             # loading
+│   ├── data_diagnostics.py # checks for invalid values
 │   ├── preprocessing.py    # cleaning + train/test split
-│   ├── model.py             # model construction
+│   ├── model.py            # model construction
 │   ├── evaluate.py         # accuracy metrics + fairness check
 │   └── results.py          # saves each run's report to disk
 ├── results/                # created automatically -- one file per run (not tracked in git)
