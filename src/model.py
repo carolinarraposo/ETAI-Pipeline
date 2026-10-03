@@ -1,12 +1,15 @@
 """Model construction."""
+from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 
 _MODELS = {
+    "dummy": DummyClassifier,   # always predicts the majority class: the floor every real model must beat
     "logistic_regression": LogisticRegression,
     "decision_tree": DecisionTreeClassifier,
+    "random_forest": RandomForestClassifier,   # many trees on random row/feature subsets, predictions averaged (untuned)
 }
-
 
 def build_model(model_config: dict):
     model_type = model_config["type"]

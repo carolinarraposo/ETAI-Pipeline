@@ -51,6 +51,37 @@ Fairness (False Positive Rate by Race, cleaned groups):
 The gap is +0.24 for COMPAS and +0.14 for both models: reduced, not eliminated. This corrects the week 2
 conclusion that the Decision Tree nearly closed the gap, which was largely noise from the fragmented race groups.
 
+### Week 4: preprocessing inside the pipeline + cross-validation
+
+The pipeline now cleans the data, sets a locked test set aside (20%, never used yet), and evaluates one `Pipeline`
+(imputation + target encoding + robust scaling + model) on the development set with both a single holdout split
+and stratified 5-fold cross-validation. Everything fitted (medians, encoder means, scaling) is learned on training
+rows only, inside each fold.
+
+| Model | Holdout acc. (W3) | Holdout acc. (W4) | CV acc. (mean ± std) | CV train - val gap |
+|---|---|---|---|---|
+| Dummy (majority) | - | 0.550 | 0.549 ± 0.000 | -0.000 |
+| Logistic Regression | 0.655 | 0.674 | 0.672 ± 0.013 | +0.003 |
+| Decision Tree | 0.604 | 0.591 | 0.610 ± 0.018 | +0.085 |
+| Random Forest | - | 0.644 | 0.650 ± 0.018 | +0.083 |
+
+W3 = naive preprocessing evaluated on the test split; W4 = new preprocessing on a validation split of the development set,
+so the two holdout columns are indicative, not exactly comparable.
+
+**Preprocessing vs. week 3:** Logistic Regression improved (0.655 -> 0.674); the Decision Tree moved within noise
+(0.604 -> 0.591, CV std 0.018), though its overfitting gap dropped from +0.195 to +0.085.
+
+**Holdout vs. CV:** a single holdout number depends on the split: the 5 folds of the Logistic Regression range from 0.654 to 0.688.
+I trust the CV mean ± std more, since it uses every development row for validation and shows how much the estimate moves.
+Both agree on the ranking.
+
+**Best model:** Logistic Regression still holds under CV: it beats the Random Forest (0.672 vs 0.650) in all 5 folds
+and barely overfits, so the week 2/3 conclusion stands. Every real model beats the 0.549 majority-class floor.
+
+**Fairness (FPR by race, out-of-fold):** the African-American vs. Caucasian gap is +0.22 for COMPAS and +0.13 / +0.09 / +0.13
+for Logistic Regression / Decision Tree / Random Forest: reduced, not eliminated. (The dummy's FPR of 0 is meaningless:
+it never predicts recidivism.)
+
 ## Project structure
 
 ```
@@ -70,6 +101,8 @@ conclusion that the Decision Tree nearly closed the gap, which was largely noise
     ├── compas_two_year_recidivism.csv
     └── README.md            # problem description + full data dictionary
 ```
+
+
 
 ## Pipeline progress
 
