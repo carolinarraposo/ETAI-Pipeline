@@ -82,6 +82,21 @@ and barely overfits, so the week 2/3 conclusion stands. Every real model beats t
 for Logistic Regression / Decision Tree / Random Forest: reduced, not eliminated. (The dummy's FPR of 0 is meaningless:
 it never predicts recidivism.)
 
+### Week 5: hyperparameter tuning
+
+Optuna (TPE) tunes each model on the development set only, every candidate scored by 5-fold CV of the whole pipeline;
+the honest number is the nested CV (outer folds judge, inner folds choose). The test set is still locked.
+
+| Model | Default CV | Tuned (nested CV) | Chosen hyperparameters |
+|---|---|---|---|
+| Decision tree | 0.610 ± 0.018 | 0.672 ± 0.017 | max_depth 6, min_samples_leaf 101 |
+| Logistic regression | 0.672 ± 0.013 | 0.673 ± 0.016 | C 0.072 |
+| Random forest | 0.647 ± 0.016 | 0.679 ± 0.018 | 169 trees, max_depth 10, min_samples_leaf 20 |
+
+Tuning helped the decision tree most (+0.062, its default overfit) and did nothing for logistic regression (it had no
+overfitting to fix). The forest has the best mean, but its edge over logistic regression is smaller than the fold std,
+so the three models are effectively tied.
+
 ## Project structure
 
 ```
@@ -95,7 +110,9 @@ it never predicts recidivism.)
 │   ├── preprocessing.py    # cleaning + train/test split
 │   ├── model.py            # model construction
 │   ├── evaluate.py         # accuracy metrics + fairness check
+│   ├── tuning.py           # Optuna tuning + nested cross-validation
 │   └── results.py          # saves each run's report to disk
+
 ├── results/                # created automatically -- one file per run (not tracked in git)
 └── data/
     ├── compas_two_year_recidivism.csv

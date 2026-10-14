@@ -26,8 +26,11 @@ def save_run(results_dir: str, config: dict, report_text: str) -> str:
         f"Preprocessing: encoder={config['preprocessing']['encoder']}, scaler={config['preprocessing']['scaler']}\n"
         f"Locked test set: size={config['test_set']['size']}  random_state={config['test_set']['random_state']}\n"
         f"CV: {config['cv']['n_splits']} stratified folds, shuffle={config['cv']['shuffle']}, "
+        f"Tuning: {'Optuna TPE, ' + str(config['tuning']['n_trials']) + ' trials, ' + str(config['tuning']['n_splits']) + ' inner folds' if config.get('tuning', {}).get('enabled') else 'off'}\n"
         f"random_state={config['cv']['random_state']}\n"
     )
+
+    
 
     with open(path, "w") as f:
         f.write(header + report_text)

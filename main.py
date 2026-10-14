@@ -6,20 +6,18 @@ Run with:
 
     load config -> load data -> clean -> drop duplicates -> features/target -> set the locked test set aside
     -> Pipeline(preprocessing + model) -> holdout and cross-validation on the development set
-    -> fairness audit -> save results
+    -> (if tuning.enabled) nested CV + tuning on the development set -> fairness audit -> save results
 """
 import yaml
 from sklearn.model_selection import StratifiedKFold
-from sklearn.pipeline import Pipeline
 
 from src.data import load_data
-from src.preprocessing import (
-    clean_dataset, drop_duplicate_rows, split_features_target, split_dev_test, build_preprocessor,
-)
-from src.model import build_model
+from src.preprocessing import clean_dataset, drop_duplicate_rows, split_features_target, split_dev_test
+from src.model import build_pipeline
 from src.evaluate import (
     holdout_report, cross_validate_pipeline, cv_report, oof_classification_report, fairness_report,
 )
+from src.tuning import tune_pipeline, nested_cross_validate, tuning_report
 from src.results import save_run
 
 
@@ -44,11 +42,7 @@ def main():
         random_state=config["test_set"]["random_state"],
     )
 
-    # preprocessing + model in ONE estimator: everything is fitted on training rows only
-    pipeline = Pipeline([
-        ("prep", build_preprocessor(config["preprocessing"])),
-        ("model", build_model(config["model"])),
-    ])
+    pipeline = build_pipeline(config["preprocessing"], config["model"])
 
     cv_config = config["cv"]
     shuffle = cv_config.get("shuffle", True)
@@ -56,17 +50,48 @@ def main():
         n_splits=cv_config["n_splits"], shuffle=shuffle,
         random_state=cv_config.get("random_state") if shuffle else None,
     )
+    scoring = cv_config.get("scoring", "accuracy")
+    n_jobs = cv_config.get("n_jobs", 1)
 
     report = holdout_report(pipeline, X_dev, y_dev, random_state=cv_config["random_state"])
 
-    fold_scores, y_oof = cross_validate_pipeline(
-        pipeline, X_dev, y_dev, cv, cv_config.get("scoring", "accuracy"), cv_config.get("n_jobs", 1)
-    )
-    report += "\n" + cv_report(fold_scores, cv_config.get("scoring", "accuracy"))
+    # default hyperparameters, 5-fold CV
+    fold_scores, y_oof = cross_validate_pipeline(pipeline, X_dev, y_dev, cv, scoring, n_jobs)
+    report += "\n" + cv_report(fold_scores, scoring)
+
+    # hyperparameter tuning: development set only, every candidate scored by CV of the whole pipeline
+    tuning_config = config.get("tuning", {})
+    if tuning_config.get("enabled", False):
+        model_type = config["model"]["type"]
+        search_spaces = tuning_config.get("search_spaces") or {}
+        if model_type not in search_spaces:
+            raise ValueError(
+                f"tuning.enabled is true but tuning.search_spaces has no entry for '{model_type}'. "
+                f"Add one, or set tuning.enabled: false. Defined: {list(search_spaces)}"
+            )
+        search_space = search_spaces[model_type]
+        n_trials = tuning_config["n_trials"]
+        tuning_seed = tuning_config["random_state"]
+        inner_cv = StratifiedKFold(n_splits=tuning_config["n_splits"], shuffle=True, random_state=tuning_seed)
+
+        # 1. the honest estimate of "tune, then refit" (its predictions replace the untuned ones)
+        nested_scores, y_oof = nested_cross_validate(
+            pipeline, X_dev, y_dev, cv, inner_cv, scoring, search_space, n_trials, tuning_seed, n_jobs=n_jobs
+        )
+        report += "\nNested cross-validation (tuned pipeline)\n" + cv_report(nested_scores, scoring)
+
+        # 2. the hyperparameters we keep: the same procedure, once, on the whole development set
+        pipeline, study = tune_pipeline(
+            pipeline, X_dev, y_dev, inner_cv, scoring, search_space, n_trials, tuning_seed, n_jobs=n_jobs
+        )
+        report += "\n" + tuning_report(study, nested_scores, scoring)
+
     report += "\n" + oof_classification_report(y_dev, y_oof)
     report += "\n" + fairness_report(
         y_dev, y_oof, extras_dev, sensitive_attr=config["data"]["sensitive_attr"]
     )
+
+    pipeline.fit(X_dev, y_dev)     # the final model: refit on ALL development rows (tuned, if tuning ran)
 
     results_dir = config.get("output", {}).get("results_dir", "results")
     path = save_run(results_dir, config, report)
