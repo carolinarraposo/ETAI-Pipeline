@@ -12,11 +12,9 @@ import yaml
 from sklearn.model_selection import StratifiedKFold
 
 from src.data import load_data
-from src.preprocessing import clean_dataset, drop_duplicate_rows, split_features_target, split_dev_test
+from src.preprocessing import clean_dataset, drop_duplicate_rows, add_engineered_features, split_features_target, split_dev_test
 from src.model import build_pipeline
-from src.evaluate import (
-    holdout_report, cross_validate_pipeline, cv_report, oof_classification_report, fairness_report,
-)
+from src.evaluate import holdout_report, cross_validate_pipeline, cv_report, oof_classification_report, fairness_report
 from src.tuning import tune_pipeline, nested_cross_validate, tuning_report
 from src.results import save_run
 
@@ -32,6 +30,7 @@ def main():
     df = load_data(config["data"]["path"])
     df = clean_dataset(df, config["diagnostics"])                              # rules only: keeps every row
     df = drop_duplicate_rows(df, config["diagnostics"]["id_column"])           # training data only, before the split
+    df = add_engineered_features(df)                                           # fixed formulas: safe before the split
 
     X, y, extras = split_features_target(df, config["data"], config["preprocessing"]["mnar_indicator_sources"])
 

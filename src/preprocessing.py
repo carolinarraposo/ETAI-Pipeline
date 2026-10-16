@@ -135,3 +135,20 @@ def build_preprocessor(preprocessing_config):
         ("categorical", categorical_pipeline, preprocessing_config["categorical_features"]),
         ("indicators", "passthrough", indicator_cols),
     ])
+
+def add_engineered_features(df):
+    """Fixed formulas only: nothing is learned from the data, so it is safe before the split (and on new data).
+    Missing inputs stay missing (NaN) and are imputed later, inside the Pipeline."""
+    out = df.copy()
+
+    # priors per year of adulthood (the notebook's example)
+    out["priors_per_adult_year"] = out["priors_count"] / (out["age"] - 17).clip(lower=1)
+
+    # 1 if the person has any juvenile record (felony + misdemeanor + other)
+    juvenile = out[["juv_fel_count", "juv_misd_count", "juv_other_count"]].sum(axis=1, skipna=False)
+    out["has_juvenile_record"] = (juvenile > 0).astype(float).where(juvenile.notna())
+
+    # 1 if the person is under 25 AND has 3 or more priors (an interaction a tree needs two splits for)
+    known = out["age"].notna() & out["priors_count"].notna()
+    out["young_with_priors"] = ((out["age"] < 25) & (out["priors_count"] >= 3)).astype(float).where(known)
+    return out

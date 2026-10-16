@@ -51,7 +51,7 @@ Fairness (False Positive Rate by Race, cleaned groups):
 The gap is +0.24 for COMPAS and +0.14 for both models: reduced, not eliminated. This corrects the week 2
 conclusion that the Decision Tree nearly closed the gap, which was largely noise from the fragmented race groups.
 
-### Week 4: preprocessing inside the pipeline + cross-validation
+## Week 4: preprocessing inside the pipeline + cross-validation
 
 The pipeline now cleans the data, sets a locked test set aside (20%, never used yet), and evaluates one `Pipeline`
 (imputation + target encoding + robust scaling + model) on the development set with both a single holdout split
@@ -82,7 +82,7 @@ and barely overfits, so the week 2/3 conclusion stands. Every real model beats t
 for Logistic Regression / Decision Tree / Random Forest: reduced, not eliminated. (The dummy's FPR of 0 is meaningless:
 it never predicts recidivism.)
 
-### Week 5: hyperparameter tuning
+## Week 5: hyperparameter tuning
 
 Optuna (TPE) tunes each model on the development set only, every candidate scored by 5-fold CV of the whole pipeline;
 the honest number is the nested CV (outer folds judge, inner folds choose). The test set is still locked.
@@ -97,6 +97,45 @@ Tuning helped the decision tree most (+0.062, its default overfit) and did nothi
 overfitting to fix). The forest has the best mean, but its edge over logistic regression is smaller than the fold std,
 so the three models are effectively tied.
 
+## Week 6: ensembles and feature engineering
+
+Nested CV (30 Optuna trials, same 5 outer folds for every model); "default" uses the hyperparameters in `config.yaml`.
+
+| Model | Default: CV mean ± std (gap) | Tuned: nested CV mean ± std (gap) | Chosen hyperparameters |
+|---|---|---|---|
+| Logistic regression | 0.672 ± 0.013 (+0.003) | 0.673 ± 0.016 (+0.004) | C 0.072 |
+| Decision tree | 0.610 ± 0.018 (+0.085) | 0.672 ± 0.017 (+0.013) | max_depth 6, min_samples_leaf 101 |
+| Random forest | 0.650 ± 0.019 (+0.082) | 0.681 ± 0.015 (+0.009) | max_depth 22, min_samples_leaf 42, max_features 0.5 |
+| Oblique random forest | 0.647 ± 0.011 (+0.114) | 0.679 ± 0.013 (+0.010) | max_depth 5, min_samples_leaf 47, n_components 5 |
+| AdaBoost | 0.676 ± 0.012 (+0.006) | 0.682 ± 0.017 (+0.004) | base depth 4, 220 rounds, learning_rate 0.025 |
+
+**Model choice:** AdaBoost has the best mean (0.682), but its lead over the random forest (0.681), the oblique forest (0.679)
+and even logistic regression (0.673) is smaller than the fold-to-fold std (~0.015), so the models are effectively tied.
+Tuning helped the models that overfit by default (both forests and the tree: gaps of +0.08 to +0.11 dropped to about +0.01)
+and barely changed those that did not (AdaBoost with stumps, logistic regression). I report the nested CV score, not the best
+trial's: the optimism was negligible (0 to +0.002).
+
+**Chosen hyperparameters fit each model:** the forests keep deep trees (depth 22) but force `min_samples_leaf` ~40, so the leaf
+size is the real brake, not the depth. AdaBoost chose shallow base trees (depth 4) and a small learning rate (0.025):
+weak learners and slow steps, as boosting expects.
+
+**Feature engineering** (`priors_per_adult_year`, `has_juvenile_record`, `young_with_priors`; nested CV, with vs. without):
+
+| Model | Without | With | Folds improved |
+|---|---|---|---|
+| Random forest | 0.681 | 0.671 | 1/5 |
+| AdaBoost | 0.682 | 0.677 | 2/5 |
+| Logistic regression | 0.673 | 0.678 | 4/5 |
+
+All three features are fixed formulas (nothing is learned from the data), so they can be computed before the split without
+leaking. They did not help the tree ensembles (the forest got worse in 4 of 5 folds, -0.010); logistic regression gained
++0.005, within the fold std. A linear model cannot build a ratio on its own, while trees approximate it with splits. I keep
+the original feature set.
+
+**AdaBoost over logistic regression** (challenge 2): 0.679 ± 0.010, no gain over logistic regression alone (0.673) or
+AdaBoost over trees. The tuner chose only 27 rounds, at the lower end of its range: boosting reduces the bias of weak
+learners, and logistic regression is already stable. A weighted vote of linear classifiers can bend the decision boundary,
+but here the signal is close to linear and it barely does.
 ## Project structure
 
 ```
