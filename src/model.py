@@ -1,6 +1,10 @@
 """Model construction."""
 from sklearn.dummy import DummyClassifier
-from sklearn.ensemble import AdaBoostClassifier, BaggingClassifier, RandomForestClassifier
+from sklearn.ensemble import (
+    AdaBoostClassifier, BaggingClassifier, GradientBoostingClassifier,
+    HistGradientBoostingClassifier, RandomForestClassifier,
+)
+from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.random_projection import SparseRandomProjection
@@ -42,6 +46,9 @@ _MODELS = {
     "oblique_random_forest": oblique_random_forest,
     "adaboost": adaboost,
     "adaboost_lr": adaboost_lr,
+    "gradient_boosting": GradientBoostingClassifier,   # many trees in sequence, each one correcting the previous (untuned)
+    "hist_gradient_boosting": HistGradientBoostingClassifier,   # faster version of gradient boosting, with histogram binning
+    "naive_bayes": GaussianNB,   # naive Bayes with Gaussian likelihoods
 }
 
 def build_model(model_config: dict):

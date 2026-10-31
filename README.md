@@ -136,6 +136,36 @@ the original feature set.
 AdaBoost over trees. The tuner chose only 27 rounds, at the lower end of its range: boosting reduces the bias of weak
 learners, and logistic regression is already stable. A weighted vote of linear classifiers can bend the decision boundary,
 but here the signal is close to linear and it barely does.
+## Week 7: boosting and metric evaluation
+
+**Selection metric: ROC-AUC**, chosen before comparing models. COMPAS is a risk score used to rank people, and choosing
+the threshold is a separate decision; ROC-AUC scores the ranking at every threshold, so it does not depend on the 0.5 cut-off,
+and it separates models that accuracy could not (see below). Every run also reports accuracy, balanced accuracy, precision,
+recall, F1, F2 and average precision. `class_weight: balanced` is used where the model supports it (logistic regression,
+decision tree, random forest, HistGradientBoosting): it barely moves ROC-AUC but raises recall and every group's false positive rate.
+
+Scoreboard (nested CV for tuned models, 30 Optuna trials, same 5 folds; the no-model floor is 0.500):
+
+| Model | Untuned | Tuned: nested CV mean ± std | Chosen hyperparameters |
+|---|---|---|---|
+| Gradient boosting | 0.727 | **0.727 ± 0.014** | 426 trees, learning_rate 0.012, depth 3, min_samples_leaf 2, subsample 0.77 |
+| HistGradientBoosting | 0.717 | 0.727 ± 0.016 | 82 iterations, learning_rate 0.111, 4 leaves, min_samples_leaf 130 |
+| Oblique random forest | 0.685 | 0.727 ± 0.014 | depth 17, min_samples_leaf 153, n_components 5 |
+| AdaBoost | 0.723 | 0.726 ± 0.016 | base depth 4, 55 rounds, learning_rate 0.167 |
+| Random forest | 0.683 | 0.726 ± 0.013 | depth 9, min_samples_leaf 42, max_features 0.5 |
+| Logistic regression | 0.719 | 0.718 ± 0.014 | C 0.0022 |
+| Decision tree | 0.604 | 0.717 ± 0.017 | depth 16, min_samples_leaf 88, gini |
+| Naive Bayes | 0.685 | 0.705 ± 0.012 | var_smoothing 0.091 |
+| Dummy (floor) | 0.500 | - | - |
+
+**What the scoreboard says:** the five ensembles are tied at the top (0.726 to 0.727): the corrected paired t-test of the best
+(gradient boosting) against each of them gives p between 0.60 and 0.89. They are, however, separated from logistic regression
+(+0.009, better in 5 of 5 folds, p = 0.004), the decision tree (+0.011, p = 0.026) and Naive Bayes (+0.022, p = 0.004). Tuning
+helped the models that overfit by default (decision tree +0.113, random forest +0.044, oblique forest +0.042) and did nothing
+for logistic regression, which has no overfitting to fix. The tests compare against the best mean, which was picked after
+seeing the results, so they are slightly optimistic.
+
+
 ## Project structure
 
 ```
@@ -167,6 +197,11 @@ This table is updated after each practical class, so you can always see what cha
 | Week | Practical class focus | Added to the pipeline |
 |------|------------------------|------------------------|
 | 2 | Introduction & baseline pipeline | Initial version: project structure, a single naive train/test split (no cross-validation), minimal preprocessing (drop rows with missing values, one-hot encode categoricals), logistic regression baseline, a first (deliberately simple) fairness check comparing our model's and COMPAS's own false-positive rate by race, train-vs-test accuracy reporting (to start spotting overfitting), and each run's full report saved automatically to `results/` |
+| 3 | EDA and cleaning | `clean_dataset()` in `preprocessing.py`: config-driven cleaning (placeholders and invalid values to NaN, category spellings fixed, redundant columns dropped), `diagnostics` section in `config.yaml`, `drop_duplicates` |
+| 4 | Preprocessing inside the pipeline + cross-validation | `build_preprocessor()` (imputation, target encoding, robust scaling) inside a `Pipeline`; a **locked test set** (`split_dev_test()`); stratified 5-fold CV of the whole pipeline with out-of-fold predictions; `dummy` and `random_forest` models; `drop_duplicate_rows()` moved before the split |
+| 5 | Hyperparameter tuning | `src/tuning.py` (Optuna TPE, `tune_pipeline()`, `nested_cross_validate()`, `tuning_report()`); `build_pipeline()`; a `tuning` section with one search space per model; `requirements.txt` gains `optuna` |
+| 6 | Ensembles and feature engineering | `adaboost()` and `oblique_random_forest()` builders and their search spaces; `add_engineered_features()` (fixed formulas, computed before the split) |
+| 7 | Boosting and metric evaluation | `gradient_boosting`, `hist_gradient_boosting` and `naive_bayes` registered in `_MODELS`; every run now keeps **out-of-fold probabilities** and reports 8 metrics (`cv.metrics`), with ROC-AUC as the `selection_metric` that tuning maximises; a **scoreboard** (`results/runs.csv`) keeps one row per run (settings, per-fold scores, no-model floor, untuned score), and a corrected paired t-test is available in `evaluate.py` |
 
 ## Environment setup
 
