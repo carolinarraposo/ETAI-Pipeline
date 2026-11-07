@@ -165,6 +165,34 @@ helped the models that overfit by default (decision tree +0.113, random forest +
 for logistic regression, which has no overfitting to fix. The tests compare against the best mean, which was picked after
 seeing the results, so they are slightly optimistic.
 
+## Week 8: XGBoost and feature selection
+
+**XGBoost** is gradient boosting with extra brakes applied inside each split (`gamma`, `reg_alpha`, `reg_lambda`,
+`min_child_weight`), so its defaults (depth 6, learning rate 0.3) overfit easily. Untuned it scores 0.706; tuned
+with nested CV (30 Optuna trials) it reaches **0.727 ± 0.013**, level with gradient boosting and HistGradientBoosting
+(0.727), so it does not beat the earlier ensembles on COMPAS.
+
+**Feature selection.** A `VoteSelector` was added between preprocessing and the model: a random forest and gradient
+boosting vote for features with above-average importance, an L1 logistic regression votes for features it does not
+shrink to zero, and a feature is kept if it gets at least `min_votes` of the 3 votes. It is a step of the Pipeline,
+so it is re-fitted on the training rows of every fold (selecting on all rows first would leak the labels), and
+`min_votes` is tuned together with the model inside the nested CV. The preprocessing and selection steps are cached
+(`memory`) so tuning does not refit them in every trial.
+
+| XGBoost, tuned (nested CV, same 5 folds) | ROC-AUC | Features used |
+|---|---|---|
+| Without selection | 0.727 ± 0.013 | 10 |
+| With selection (`vote`) | 0.726 ± 0.013 | 2 |
+
+The difference is -0.001, with selection ahead in only 2 of 5 folds (corrected paired t-test: p = 0.72), so the two
+runs are statistically indistinguishable. The final model keeps just **`age` and `priors_count`**, and with so few
+features the tuner picked very shallow trees (depth 1, 550 trees). This agrees with what the earlier weeks showed:
+on COMPAS almost all the signal is in these two variables, and the other eight add noise rather than information.
+
+**Decision: selection stays on.** The model is as good with 2 features as with 10, so we gain a simpler and more
+explainable model for free. Two caveats: the number of votes needed was not stable across the outer folds (2, 1, 3, 1,
+1), so the exact set of kept features is sensitive to the data, and the selector adds fit time (reduced by the cache).
+
 
 ## Project structure
 
@@ -175,7 +203,6 @@ seeing the results, so they are slightly optimistic.
 ├── requirements.txt
 ├── src/
 │   ├── data.py             # loading
-│   ├── data_diagnostics.py # checks for invalid values
 │   ├── preprocessing.py    # cleaning + train/test split
 │   ├── model.py            # model construction
 │   ├── evaluate.py         # accuracy metrics + fairness check
@@ -202,6 +229,7 @@ This table is updated after each practical class, so you can always see what cha
 | 5 | Hyperparameter tuning | `src/tuning.py` (Optuna TPE, `tune_pipeline()`, `nested_cross_validate()`, `tuning_report()`); `build_pipeline()`; a `tuning` section with one search space per model; `requirements.txt` gains `optuna` |
 | 6 | Ensembles and feature engineering | `adaboost()` and `oblique_random_forest()` builders and their search spaces; `add_engineered_features()` (fixed formulas, computed before the split) |
 | 7 | Boosting and metric evaluation | `gradient_boosting`, `hist_gradient_boosting` and `naive_bayes` registered in `_MODELS`; every run now keeps **out-of-fold probabilities** and reports 8 metrics (`cv.metrics`), with ROC-AUC as the `selection_metric` that tuning maximises; a **scoreboard** (`results/runs.csv`) keeps one row per run (settings, per-fold scores, no-model floor, untuned score), and a corrected paired t-test is available in `evaluate.py` |
+| 8 | XGBoost and feature selection | `xgboost` registered in `_MODELS` with its search space (incl. `gamma`, `reg_alpha`); `VoteSelector` (random forest + gradient boosting + L1 logistic regression vote) as an optional step of `build_pipeline()`, with `min_votes` tuned together with the model; a pipeline cache (`memory`, temporary folder removed at the end of the run); a `feature_selection` section in `config.yaml` and a matching scoreboard column; `requirements.txt` gains `xgboost` |
 
 ## Environment setup
 

@@ -21,6 +21,12 @@ def save_run(results_dir: str, run: str, config: dict, report_text: str) -> str:
     cv, tuning = config["cv"], config.get("tuning", {})
     tuning_line = (f"Optuna TPE, {tuning['n_trials']} trials, {tuning['n_splits']} inner folds"
                    if tuning.get("enabled") else "off")
+
+    fs = config.get("feature_selection") or {}
+    selection_line = (f"on (VoteSelector, min_votes={fs.get('min_votes', 2)}"
+                      f"{', tuned together with the model' if tuning.get('enabled') else ''})"
+                      if fs.get("enabled") else "off")
+    
     header = (
         f"Run: {run}\n"
         f"Model: {config['model']['type']}  params={config['model'].get('params')}\n"
@@ -29,6 +35,7 @@ def save_run(results_dir: str, run: str, config: dict, report_text: str) -> str:
         f"CV: {cv['n_splits']} stratified folds, shuffle={cv['shuffle']}, random_state={cv['random_state']}\n"
         f"Metrics: {cv['metrics']}  |  selection metric: {cv['selection_metric']}\n"
         f"Tuning: {tuning_line}\n"
+        f"Feature selection: {selection_line}\n"
         + "=" * 60 + "\n\n"
     )
     with open(path, "w", encoding="utf-8") as f:
