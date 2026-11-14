@@ -146,5 +146,5 @@ model:
 
 
 output:
-  results_dir: "results"   # each run's full report is saved here as a timestamped .txt file
-  scoreboard: "results/runs.csv" # one row per run: what the models are compared on
+  results_dir: "results/results_COMPAS"   # each run's full report is saved here as a timestamped .txt file
+  scoreboard: "results/results_COMPAS/runs.csv" # one row per run: what the models are compared on

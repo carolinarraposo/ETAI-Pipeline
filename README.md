@@ -193,6 +193,40 @@ on COMPAS almost all the signal is in these two variables, and the other eight a
 explainable model for free. Two caveats: the number of votes needed was not stable across the outer folds (2, 1, 3, 1,
 1), so the exact set of kept features is sensitive to the data, and the selector adds fit time (reduced by the cache).
 
+## Week 9: Beyond COMPAS (the Adult income dataset)
+
+```bash
+python main.py                    # COMPAS (results in results/results_COMPAS/)
+python main.py config_adult.yaml  # Adult  (results in results/results_adult/, with predictions.csv)
+```
+
+`sex` is the sensitive attribute audited by the fairness report (large groups: 1,955 women and 4,045 men; 11.7% of
+women vs 29.8% of men earn more than 50K). `race` has very small groups, so it is not audited, and neither is a
+model feature. `fnlwgt`, `id` and `education` are dropped; `v01`-`v25` are kept and left to feature selection.
+
+### What broke, why, and how it was fixed
+
+| What broke | Why | Fix |
+|---|---|---|
+| `main.py` only read `config.yaml` | the file name was fixed in the code | the config path is now an argument, default `config.yaml` |
+| `add_engineered_features()` raised `KeyError` | it computed COMPAS's formulas on every dataset | each feature is only created if its columns exist |
+| `fairness_report()` raised `KeyError: 'score_text'` | it always compared with COMPAS's own score | that comparison is only added if the column exists |
+| `?` would have stayed as a category | `clean_dataset()` only cleans columns listed in `canonical_categories` | `workclass`, `occupation` and `native_country` are listed there |
+| New rows had no prediction step | the pipeline only trained and evaluated | after the final refit, an optional step predicts `adult_new.csv` (2,000 rows in, 2,000 out) |
+
+### Results
+
+| Run | ROC-AUC | Accuracy | F1 |
+|---|---|---|---|
+| XGBoost, default hyperparameters | 0.901 ± 0.012 | 0.848 ± 0.007 | 0.669 ± 0.016 |
+| **XGBoost, tuned (nested CV)** | **0.911 ± 0.016** | **0.860 ± 0.011** | **0.674 ± 0.029** |
+| Target | ≥ 0.90 | ≥ 0.855 | ≥ 0.66 |
+
+Feature selection keeps 8 of 36 features (`age`, `education_num`, `capital_gain`, `capital_loss`,
+`hours_per_week`, `marital_status`, `occupation`, `relationship`) and none of the `v` columns. Predictions for the
+2,000 new people are in `results/results_adult/predictions.csv` (`id`, `probability`, `prediction`).
+
+The hardest assumption to find was the `?` placeholder: nothing failed, because `clean_dataset()` only cleans the columns listed in `canonical_categories`, so `?` would have stayed as a category if the expected missing counts (379, 381 and 86) had not been checked. The other assumptions (the engineered features and the fairness report) stopped the run with a `KeyError` that pointed straight to them. What took the pipeline to the target scores was tuning: it raised accuracy from 0.848 to 0.860 and ROC-AUC from 0.901 to 0.911, with F1 already above target. The three metrics pull in different directions (precision 0.76, recall 0.61), so none of them is enough on its own. Feature selection kept 8 of 36 features and none of the anonymous `v` columns.
 
 ## Project structure
 
@@ -200,6 +234,7 @@ explainable model for free. Two caveats: the number of votes needed was not stab
 .
 ├── main.py                # entry point: run the whole pipeline
 ├── config.yaml             # all tunable settings live here
+├── config_adult.yaml       # same pipeline, configured for the Adult income 
 ├── requirements.txt
 ├── src/
 │   ├── data.py             # loading
@@ -212,7 +247,10 @@ explainable model for free. Two caveats: the number of votes needed was not stab
 ├── results/                # created automatically -- one file per run (not tracked in git)
 └── data/
     ├── compas_two_year_recidivism.csv
-    └── README.md            # problem description + full data dictionary
+    ├── adult_train.csv
+    ├── adult_new.csv
+    ├── COMPAS_README.md    # COMPAS data dictionary
+    └── ADULT_README.md     # Adult data dictionary
 ```
 
 
@@ -230,6 +268,7 @@ This table is updated after each practical class, so you can always see what cha
 | 6 | Ensembles and feature engineering | `adaboost()` and `oblique_random_forest()` builders and their search spaces; `add_engineered_features()` (fixed formulas, computed before the split) |
 | 7 | Boosting and metric evaluation | `gradient_boosting`, `hist_gradient_boosting` and `naive_bayes` registered in `_MODELS`; every run now keeps **out-of-fold probabilities** and reports 8 metrics (`cv.metrics`), with ROC-AUC as the `selection_metric` that tuning maximises; a **scoreboard** (`results/runs.csv`) keeps one row per run (settings, per-fold scores, no-model floor, untuned score), and a corrected paired t-test is available in `evaluate.py` |
 | 8 | XGBoost and feature selection | `xgboost` registered in `_MODELS` with its search space (incl. `gamma`, `reg_alpha`); `VoteSelector` (random forest + gradient boosting + L1 logistic regression vote) as an optional step of `build_pipeline()`, with `min_votes` tuned together with the model; a pipeline cache (`memory`, temporary folder removed at the end of the run); a `feature_selection` section in `config.yaml` and a matching scoreboard column; `requirements.txt` gains `xgboost` |
+| 9 | Beyond COMPAS (new dataset: Adult income) | `main.py` takes the config file as an argument (default `config.yaml`); `config_adult.yaml` and its own `results/results_adult/` folder; `add_engineered_features()` and `fairness_report()` no longer assume COMPAS columns; cleaning of Adult's `?` placeholders; optional `data.new_path` / `output.predictions` to predict a file of new rows after the final refit |
 
 ## Environment setup
 
@@ -286,7 +325,8 @@ That's it -- activate, then run. If you don't see `(venv)` at the start of your 
 With the environment active (see above), from the project's root
 folder, on any OS:
 ```bash
-python main.py
+python main.py                    # COMPAS (config.yaml)
+python main.py config_adult.yaml  # Adult  (any other config file can be passed the same way)
 ```
 
 This loads `config.yaml`, loads and preprocesses the data, trains the model, and prints:
@@ -304,4 +344,4 @@ You're free to improve on this structure or restructure it entirely -- what matt
 
 ## Dataset
 
-See `data/README.md`.
+See `data/COMPAS_README.md` and `data/ADULT_README.md`.

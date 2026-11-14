@@ -8,9 +8,11 @@ Run with:
     -> Pipeline(preprocessing + [feature selection] + model) -> CV with several metrics (and the no-model floor)
     -> (if tuning.enabled) nested CV + tuning on the development set -> reports -> scoreboard
 """
+import os
 import shutil
 import tempfile
 from datetime import datetime
+import argparse
 
 import optuna
 import yaml
@@ -32,9 +34,8 @@ def load_config(path: str = "config.yaml") -> dict:
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
-
-def main():
-    config = load_config()
+def main(config_path):
+    config = load_config(config_path)
     run = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_type = config["model"]["type"]
     selection_config = config.get("feature_selection") or {}
@@ -131,6 +132,24 @@ def main():
     refit = f"Final model: {model_type} refit on all {len(X_dev)} development rows."
     report += "\n" + refit + "\n"
 
+    new_path = config["data"].get("new_path")
+    if new_path:       # only datasets that come with a file of new rows to predict
+        new_df = load_data(new_path)
+        new_df = clean_dataset(new_df, config["diagnostics"])       # no drop_duplicate_rows: every row needs a prediction
+        new_df = add_engineered_features(new_df)
+        X_new, _, _ = split_features_target(new_df, config["data"], config["preprocessing"]["mnar_indicator_sources"])
+
+        proba = pipeline.predict_proba(X_new)[:, 1]
+        predictions = new_df[[config["diagnostics"]["id_column"]]].copy()     # the id is not in X_new
+        predictions["probability"] = proba
+        predictions["prediction"] = (proba >= 0.5).astype(int)
+        assert len(predictions) == len(new_df), "rows out must equal rows in"
+
+        predictions_path = config["output"]["predictions"]
+        os.makedirs(os.path.dirname(predictions_path) or ".", exist_ok=True)
+        predictions.to_csv(predictions_path, index=False)
+        print(f"\nPredictions for {len(predictions)} new rows: {predictions_path}")
+
     kept_line = ""
     if selection_on:
         names = pipeline.named_steps["prep"].get_feature_names_out()
@@ -170,4 +189,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run the pipeline")
+    parser.add_argument("config", nargs="?", default="config.yaml", help="path to the config file (default: config.yaml)")
+    args = parser.parse_args()
+    main(args.config)
