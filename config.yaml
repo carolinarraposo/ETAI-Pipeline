@@ -55,8 +55,12 @@ preprocessing:
   mnar_indicator_sources: ["priors_count" , "c_charge_degree"]
   random_state: 42
   imputation: 
-    numeric_strategy: "median"
+    numeric_strategy: "median"  # median | mean | knn | iterative | random_forest
     categorical_strategy: "most_frequent"
+    n_neighbors: 5 #knn
+    max_iter: 10 #iterative | random_forest
+    n_estimators: 50 #random_forest
+
 
 test_set: 
   size: 0.2
@@ -148,3 +152,4 @@ model:
 output:
   results_dir: "results/results_COMPAS"   # each run's full report is saved here as a timestamped .txt file
   scoreboard: "results/results_COMPAS/runs.csv" # one row per run: what the models are compared on
+  model_path: "models/model.joblib"          # config.yaml (COMPAS)

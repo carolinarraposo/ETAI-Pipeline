@@ -214,39 +214,51 @@ model feature. `fnlwgt`, `id` and `education` are dropped; `v01`-`v25` are kept 
 | `?` would have stayed as a category | `clean_dataset()` only cleans columns listed in `canonical_categories` | `workclass`, `occupation` and `native_country` are listed there |
 | New rows had no prediction step | the pipeline only trained and evaluated | after the final refit, an optional step predicts `adult_new.csv` (2,000 rows in, 2,000 out) |
 
-### Results
+## Week 10: missing values and saving the model
 
-| Run | ROC-AUC | Accuracy | F1 |
-|---|---|---|---|
-| XGBoost, default hyperparameters | 0.901 ± 0.012 | 0.848 ± 0.007 | 0.669 ± 0.016 |
-| **XGBoost, tuned (nested CV)** | **0.911 ± 0.016** | **0.860 ± 0.011** | **0.674 ± 0.029** |
-| Target | ≥ 0.90 | ≥ 0.855 | ≥ 0.66 |
+The numeric imputer is now a config setting (`imputation.numeric_strategy`): `median`, `mean`, `knn`, `iterative`
+(MICE) or `random_forest`. Compared on COMPAS (XGBoost, no selection, no tuning, same folds):
 
-Feature selection keeps 8 of 36 features (`age`, `education_num`, `capital_gain`, `capital_loss`,
-`hours_per_week`, `marital_status`, `occupation`, `relationship`) and none of the `v` columns. Predictions for the
-2,000 new people are in `results/results_adult/predictions.csv` (`id`, `probability`, `prediction`).
+| Imputer | ROC-AUC | vs median (p) |
+|---|---|---|
+| **median** | **0.706 ± 0.024** | - |
+| iterative (MICE) | 0.705 ± 0.018 | -0.001 (0.83) |
+| mean | 0.704 ± 0.020 | -0.002 (0.73) |
+| random forest | 0.699 ± 0.021 | -0.007 (0.11) |
+| KNN | 0.699 ± 0.021 | -0.007 (0.16) |
 
-The hardest assumption to find was the `?` placeholder: nothing failed, because `clean_dataset()` only cleans the columns listed in `canonical_categories`, so `?` would have stayed as a category if the expected missing counts (379, 381 and 86) had not been checked. The other assumptions (the engineered features and the fairness report) stopped the run with a `KeyError` that pointed straight to them. What took the pipeline to the target scores was tuning: it raised accuracy from 0.848 to 0.860 and ROC-AUC from 0.901 to 0.911, with F1 already above target. The three metrics pull in different directions (precision 0.76, recall 0.61), so none of them is enough on its own. Feature selection kept 8 of 36 features and none of the anonymous `v` columns.
+No imputer is significantly different from the median, so we keep it: it is the simplest and the fastest.
 
+**Predicting new data.** `main.py` saves the final pipeline (`output.model_path`) and `predict.py` loads it, without training:
+
+```bash
+python main.py                                                 # train and save models/model.joblib
+python predict.py data/compas_new_people.csv predictions.csv   # predict a CSV
+```
+
+The output has one row per input row (`id`, `probability`, `prediction`): rows with missing values, unseen
+categories or repeated people are kept, not dropped.
 ## Project structure
 
 ```
 .
-├── main.py                # entry point: run the whole pipeline
-├── config.yaml             # all tunable settings live here
-├── config_adult.yaml       # same pipeline, configured for the Adult income 
+├── main.py                 # entry point: run the whole pipeline
+├── predict.py              # predict a CSV with the saved model
+├── config.yaml             # all tunable settings live here (COMPAS)
+├── config_adult.yaml       # same pipeline, configured for the Adult income data
 ├── requirements.txt
 ├── src/
 │   ├── data.py             # loading
-│   ├── preprocessing.py    # cleaning + train/test split
+│   ├── preprocessing.py    # cleaning + imputers + train/test split
 │   ├── model.py            # model construction
 │   ├── evaluate.py         # accuracy metrics + fairness check
 │   ├── tuning.py           # Optuna tuning + nested cross-validation
 │   └── results.py          # saves each run's report to disk
-
-├── results/                # created automatically -- one file per run (not tracked in git)
+├── models/                 # saved pipelines (created by main.py, not tracked in git)
+├── results/                # created automatically -- one folder per config (not tracked in git)
 └── data/
     ├── compas_two_year_recidivism.csv
+    ├── compas_new_people.csv   # 20 new people, to try predict.py
     ├── adult_train.csv
     ├── adult_new.csv
     ├── COMPAS_README.md    # COMPAS data dictionary
@@ -269,6 +281,7 @@ This table is updated after each practical class, so you can always see what cha
 | 7 | Boosting and metric evaluation | `gradient_boosting`, `hist_gradient_boosting` and `naive_bayes` registered in `_MODELS`; every run now keeps **out-of-fold probabilities** and reports 8 metrics (`cv.metrics`), with ROC-AUC as the `selection_metric` that tuning maximises; a **scoreboard** (`results/runs.csv`) keeps one row per run (settings, per-fold scores, no-model floor, untuned score), and a corrected paired t-test is available in `evaluate.py` |
 | 8 | XGBoost and feature selection | `xgboost` registered in `_MODELS` with its search space (incl. `gamma`, `reg_alpha`); `VoteSelector` (random forest + gradient boosting + L1 logistic regression vote) as an optional step of `build_pipeline()`, with `min_votes` tuned together with the model; a pipeline cache (`memory`, temporary folder removed at the end of the run); a `feature_selection` section in `config.yaml` and a matching scoreboard column; `requirements.txt` gains `xgboost` |
 | 9 | Beyond COMPAS (new dataset: Adult income) | `main.py` takes the config file as an argument (default `config.yaml`); `config_adult.yaml` and its own `results/results_adult/` folder; `add_engineered_features()` and `fairness_report()` no longer assume COMPAS columns; cleaning of Adult's `?` placeholders; optional `data.new_path` / `output.predictions` to predict a file of new rows after the final refit |
+| 10 | Missing values and deployment | `_NUMERIC_IMPUTERS` (median, mean, KNN, MICE, random forest) chosen by `imputation.numeric_strategy`, numeric columns scaled before imputing; imputer recorded on the scoreboard and in the report; `main.py` saves the final pipeline (`output.model_path`, `joblib`); `predict.py` predicts a CSV from the terminal, one row per input row |
 
 ## Environment setup
 

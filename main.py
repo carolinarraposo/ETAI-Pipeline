@@ -13,6 +13,7 @@ import shutil
 import tempfile
 from datetime import datetime
 import argparse
+import joblib
 
 import optuna
 import yaml
@@ -129,6 +130,14 @@ def main(config_path):
     report += "\n" + fairness_report(y_dev, oof_proba, extras_dev, sensitive_attr=config["data"]["sensitive_attr"])
 
     pipeline.fit(X_dev, y_dev)     # the final model: refit on ALL development rows (tuned, if tuning ran)
+
+    # The final fitted pipeline: what predict.py loads to predict new data.
+    model_path = config.get("output", {}).get("model_path", "models/model.joblib")
+    os.makedirs(os.path.dirname(model_path) or ".", exist_ok=True)
+    pipeline.set_params(memory=None)      # the cache folder is deleted at the end of the run; the saved model doesn't need it
+    joblib.dump(pipeline, model_path)
+    print(f"\nModel saved: {model_path}")
+
     refit = f"Final model: {model_type} refit on all {len(X_dev)} development rows."
     report += "\n" + refit + "\n"
 
@@ -167,6 +176,7 @@ def main(config_path):
         selection_label = f"vote, min_votes={selection_config.get('min_votes', 2)}"
     row = {"run": run, "data": config["data"]["path"], "model": model_type, "tuned": tuning_enabled,
            "feature_selection": selection_label,
+           "imputer": config["preprocessing"].get("imputation", {}).get("numeric_strategy", "median"),
            "encoder": config["preprocessing"]["encoder"], "scaler": config["preprocessing"]["scaler"],
            "params": str(config["model"].get("params")),
            "tuned_params": str(study.best_params) if tuning_enabled else "",
@@ -176,7 +186,7 @@ def main(config_path):
     runs = save_scores(config.get("output", {}).get("scoreboard", "results/runs.csv"), row)
     same = runs[(runs["data"] == row["data"]) & (runs["metric"] == selection_metric)]
     board = (same.sort_values("mean", ascending=False)
-             [["run", "model", "tuned", "feature_selection", "mean", "std", "untuned", "floor"]]
+             [["run", "model", "tuned", "feature_selection", "imputer", "mean", "std", "untuned", "floor"]]
              .rename(columns={"mean": selection_metric})
              .to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     print(f"\nScoreboard (runs on the same data and metric; best first)\n{board}")

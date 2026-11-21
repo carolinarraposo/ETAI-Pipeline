@@ -36,9 +36,12 @@ preprocessing:
                          "v19", "v20", "v21", "v22", "v23", "v24", "v25"]
   mnar_indicator_sources: ["workclass"]
   random_state: 42
-  imputation:
-    numeric_strategy: "median"
+  imputation: 
+    numeric_strategy: "median"  # median | mean | knn | iterative | random_forest
     categorical_strategy: "most_frequent"
+    n_neighbors: 5 #knn
+    max_iter: 10 #iterative | random_forest
+    n_estimators: 50 #random_forest
 
 test_set:
   size: 0.2
@@ -128,3 +131,4 @@ output:
   results_dir: "results/results_adult"   # each run's full report is saved here as a timestamped .txt file
   scoreboard: "results/results_adult/runs.csv" # one row per run: what the models are compared on
   predictions: "results/results_adult/predictions.csv"
+  model_path: "models/model_adult.joblib"    # config_adult.yaml

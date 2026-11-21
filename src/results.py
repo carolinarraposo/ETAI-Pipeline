@@ -31,6 +31,7 @@ def save_run(results_dir: str, run: str, config: dict, report_text: str) -> str:
         f"Run: {run}\n"
         f"Model: {config['model']['type']}  params={config['model'].get('params')}\n"
         f"Preprocessing: encoder={config['preprocessing']['encoder']}, scaler={config['preprocessing']['scaler']}\n"
+        f"Imputation: numeric={config['preprocessing'].get('imputation', {}).get('numeric_strategy', 'median')}, categorical={config['preprocessing'].get('imputation', {}).get('categorical_strategy', 'most_frequent')}\n"
         f"Locked test set: size={config['test_set']['size']}  random_state={config['test_set']['random_state']}\n"
         f"CV: {cv['n_splits']} stratified folds, shuffle={cv['shuffle']}, random_state={cv['random_state']}\n"
         f"Metrics: {cv['metrics']}  |  selection metric: {cv['selection_metric']}\n"
