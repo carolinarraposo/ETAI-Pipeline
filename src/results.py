@@ -37,6 +37,7 @@ def save_run(results_dir: str, run: str, config: dict, report_text: str) -> str:
         f"Metrics: {cv['metrics']}  |  selection metric: {cv['selection_metric']}\n"
         f"Tuning: {tuning_line}\n"
         f"Feature selection: {selection_line}\n"
+        f"Anomaly score: {(config.get('anomaly') or {}).get('method', 'none')}\n"
         + "=" * 60 + "\n\n"
     )
     with open(path, "w", encoding="utf-8") as f:

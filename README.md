@@ -136,6 +136,7 @@ the original feature set.
 AdaBoost over trees. The tuner chose only 27 rounds, at the lower end of its range: boosting reduces the bias of weak
 learners, and logistic regression is already stable. A weighted vote of linear classifiers can bend the decision boundary,
 but here the signal is close to linear and it barely does.
+
 ## Week 7: boosting and metric evaluation
 
 **Selection metric: ROC-AUC**, chosen before comparing models. COMPAS is a risk score used to rank people, and choosing
@@ -238,6 +239,39 @@ python predict.py data/compas_new_people.csv predictions.csv   # predict a CSV
 
 The output has one row per input row (`id`, `probability`, `prediction`): rows with missing values, unseen
 categories or repeated people are kept, not dropped.
+
+## Week 11: outliers and an anomaly score
+
+`AnomalyScore` is a new pipeline step (after the preprocessor, before feature selection) that appends one column,
+`anomaly_score`: how unusual each person is compared with the training rows (Isolation Forest or LOF, fitted on each
+fold's training rows only). It is chosen in the config (`anomaly.method`: `none` | `isolation_forest` | `lof`), and
+`none` is the default.
+
+**Guess** (written after a first exploratory run with Isolation Forest, before the comparison):
+1. The score might raise the ROC-AUC a little, but nothing special: the model already sees the columns it is built from.
+2. The most unusual people reoffend more.
+
+**Do the unusual people reoffend more?** Yes. Reoffending rate of the 5% most unusual development rows (about 290
+people) against the rest (45.1% overall):
+
+| Detector | Top 5% | The rest |
+|---|---|---|
+| Isolation Forest | 58.3% | 44.4% |
+| LOF (k = 20) | 51.6% | 44.7% |
+
+**Does the score help the model?** No. XGBoost with default hyperparameters, no feature selection, same 5 folds,
+corrected paired t-test against `none`:
+
+| `anomaly` | ROC-AUC | vs none | Better in | p |
+|---|---|---|---|---|
+| **none** | **0.706 ± 0.024** | - | - | - |
+| isolation_forest | 0.690 ± 0.015 | -0.016 | 0 of 5 folds | 0.085 |
+| lof | 0.694 ± 0.025 | -0.012 | 0 of 5 folds | 0.14 |
+
+My first guess was wrong and the second was right. The unusual people are mostly those with many priors and juvenile
+records, and those columns are already in the model, so the score adds no new information (and one more column
+costs a little). Neither difference is significant, so the score is left off (`method: "none"`).
+
 ## Project structure
 
 ```
@@ -282,6 +316,7 @@ This table is updated after each practical class, so you can always see what cha
 | 8 | XGBoost and feature selection | `xgboost` registered in `_MODELS` with its search space (incl. `gamma`, `reg_alpha`); `VoteSelector` (random forest + gradient boosting + L1 logistic regression vote) as an optional step of `build_pipeline()`, with `min_votes` tuned together with the model; a pipeline cache (`memory`, temporary folder removed at the end of the run); a `feature_selection` section in `config.yaml` and a matching scoreboard column; `requirements.txt` gains `xgboost` |
 | 9 | Beyond COMPAS (new dataset: Adult income) | `main.py` takes the config file as an argument (default `config.yaml`); `config_adult.yaml` and its own `results/results_adult/` folder; `add_engineered_features()` and `fairness_report()` no longer assume COMPAS columns; cleaning of Adult's `?` placeholders; optional `data.new_path` / `output.predictions` to predict a file of new rows after the final refit |
 | 10 | Missing values and deployment | `_NUMERIC_IMPUTERS` (median, mean, KNN, MICE, random forest) chosen by `imputation.numeric_strategy`, numeric columns scaled before imputing; imputer recorded on the scoreboard and in the report; `main.py` saves the final pipeline (`output.model_path`, `joblib`); `predict.py` predicts a CSV from the terminal, one row per input row |
+| 11 | Outliers | `AnomalyScore` step (Isolation Forest or LOF score appended as a feature, fitted on each fold's training rows) and `anomaly_config` in `build_pipeline()`; `anomaly` section in `config.yaml` (default `none`); the method is recorded in the runs table and the report |
 
 ## Environment setup
 

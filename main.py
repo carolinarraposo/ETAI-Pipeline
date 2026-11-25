@@ -41,6 +41,7 @@ def main(config_path):
     model_type = config["model"]["type"]
     selection_config = config.get("feature_selection") or {}
     selection_on = selection_config.get("enabled", False)
+    anomaly_config = config.get("anomaly") or {}
 
     df = load_data(config["data"]["path"])
     df = clean_dataset(df, config["diagnostics"])
@@ -71,8 +72,9 @@ def main(config_path):
     # A new cache folder per run: the fitted prep/select steps are stored here and reused when the same
     # step is fitted again on the same rows (e.g. a tuning trial that only changes the model).
     cache_dir = tempfile.mkdtemp(prefix="pipeline_cache_")
-    pipeline = build_pipeline(config["preprocessing"], config["model"], selection_config, memory=cache_dir)
-
+    pipeline = build_pipeline(config["preprocessing"], config["model"], selection_config, memory=cache_dir,
+                              anomaly_config=anomaly_config)
+    
     # the no-model floor: a dummy on the same folds, the score every real model must beat
     floor_pipeline = build_pipeline(config["preprocessing"], {"type": "dummy"})
     floor_scores, _ = cross_validate_pipeline(floor_pipeline, X_dev, y_dev, cv,
@@ -162,6 +164,8 @@ def main(config_path):
     kept_line = ""
     if selection_on:
         names = pipeline.named_steps["prep"].get_feature_names_out()
+        if "anomaly" in pipeline.named_steps:       # the anomaly step appends one column
+            names = pipeline.named_steps["anomaly"].get_feature_names_out(names)
         kept = [str(n) for n in names[pipeline.named_steps["select"].get_support()]]
         kept_line = f"Features kept ({len(kept)} of {len(names)}): {', '.join(kept)}"
         print(f"\n{kept_line}")
@@ -177,6 +181,7 @@ def main(config_path):
     row = {"run": run, "data": config["data"]["path"], "model": model_type, "tuned": tuning_enabled,
            "feature_selection": selection_label,
            "imputer": config["preprocessing"].get("imputation", {}).get("numeric_strategy", "median"),
+           "anomaly": anomaly_config.get("method", "none"),
            "encoder": config["preprocessing"]["encoder"], "scaler": config["preprocessing"]["scaler"],
            "params": str(config["model"].get("params")),
            "tuned_params": str(study.best_params) if tuning_enabled else "",
